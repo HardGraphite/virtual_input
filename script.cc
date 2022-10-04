@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <istream>
 #include <ostream>
+#include <random>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -63,10 +64,19 @@ private:
 
 class Script::Impl::Player {
 public:
+	void random_sleep(bool status) noexcept;
+
 	void operator()(const Script::Impl &script, Desktop &desktop);
 
 private:
-	static void sleep_ms(unsigned int time_ms) noexcept;
+	struct Random {
+		std::mt19937 rand_gen;
+		std::normal_distribution<double> norm_dist;
+	};
+
+	Random *random = nullptr;
+
+	void sleep_ms(unsigned int time_ms) noexcept;
 };
 
 Script::Impl::Instruction::Instruction(Opcode opcode, unsigned int operand) noexcept {
@@ -287,6 +297,18 @@ void Script::Impl::Compiler::command_sleep(
 	}
 }
 
+void Script::Impl::Player::random_sleep(bool status) noexcept {
+	if (status) {
+		if (!this->random)
+			this->random = new Random;
+	} else {
+		if (this->random) {
+			delete this->random;
+			this->random = nullptr;
+		}
+	}
+}
+
 void Script::Impl::Player::operator()(const Script::Impl &script, Desktop &desktop) {
 	const auto *code_pointer = script.code.data();
 	const auto *const code_end = code_pointer + script.code.size();
@@ -337,13 +359,22 @@ void Script::Impl::Player::operator()(const Script::Impl &script, Desktop &deskt
 			break;
 		}
 
-		this->sleep_ms(100);
+		this->sleep_ms(50);
 	}
 }
 
 void Script::Impl::Player::sleep_ms(unsigned int time_ms) noexcept {
+	if (this->random) {
+		auto &rand = *this->random;
+		auto off = rand.norm_dist(rand.rand_gen) * 0.125 * time_ms;
+		if (-off >= time_ms) [[unlikely]]
+			off = 0;
+		time_ms += static_cast<int>(off);
+	}
 	std::this_thread::sleep_for(std::chrono::milliseconds(time_ms));
 }
+
+bool Script::random_sleep = true;
 
 Script::Script() noexcept : _impl(new Impl) {
 }
@@ -372,5 +403,6 @@ void Script::clear() noexcept {
 
 void Script::play(Desktop &desktop) const {
 	Impl::Player player;
+	player.random_sleep(Script::random_sleep);
 	player(*this->_impl, desktop);
 }

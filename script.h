@@ -8,6 +8,8 @@ namespace vinput {
 // Input action script.
 class Script {
 public:
+	static bool random_sleep; // Default: true
+
 	static void print_doc(std::ostream &out) noexcept;
 
 	Script() noexcept;
