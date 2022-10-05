@@ -21,6 +21,8 @@ public:
 	Script &operator=(Script &&) = delete;
 	Script &operator=(const Script &) = delete;
 
+	bool empty() const noexcept;
+
 	void append(std::istream &source);
 	void clear() noexcept;
 

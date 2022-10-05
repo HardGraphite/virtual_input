@@ -391,6 +391,10 @@ void Script::print_doc(std::ostream &out) noexcept {
 	Impl::Compiler::print_doc(out);
 }
 
+bool Script::empty() const noexcept {
+	return this->_impl->code.empty();
+}
+
 void Script::append(std::istream &source) {
 	Impl::Compiler compiler;
 	compiler(source, *this->_impl);
