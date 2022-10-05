@@ -1,5 +1,6 @@
 #include <array>
 #include <cassert>
+#include <cstdint>
 
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
@@ -21,9 +22,27 @@ public:
 	virtual void send(Event event, bool flush) override;
 
 private:
-	::Display *display;
-	::Window root_window;
+	class KeyRepInfo {
+	public:
+		constexpr KeyRepInfo() noexcept : data(0) { }
+		KeyRepInfo(KeyCode c, unsigned int m) noexcept { assign(c, m); }
+		operator bool() const noexcept { return data; }
+		void assign(KeyCode key_code, unsigned int modifiers) noexcept;
+		KeyCode key_code() const noexcept;
+		unsigned int modifiers_mask() const noexcept;
 
+	private:
+		std::uint16_t data;
+	};
+
+	static constexpr auto KEY_COUNT = std::size_t(Event::Key::_COUNT);
+	static const KeySym keysym_map[KEY_COUNT];
+
+	Display *display;
+	Window root_window;
+	KeyRepInfo keyrep_cache[KEY_COUNT];
+
+	KeyRepInfo get_keyrep(Event::Key key) noexcept;
 	void send_key(Event event);
 	void flush() noexcept;
 };
@@ -31,6 +50,21 @@ private:
 }
 
 VINPUT_DESKTOP_CONNECTER(x11) { return new X11Desktop; }
+
+void X11Desktop::KeyRepInfo::assign(
+		KeyCode key_code, unsigned int modifiers) noexcept {
+	static_assert((ShiftMask | LockMask | ControlMask) <= 0b111);
+	this->data = (std::uint16_t(key_code) << 3) | (modifiers & 0b111);
+	assert(this->key_code() == key_code);
+}
+
+KeyCode X11Desktop::KeyRepInfo::key_code() const noexcept {
+	return static_cast<KeyCode>(this->data >> 3);
+}
+
+unsigned int X11Desktop::KeyRepInfo::modifiers_mask() const noexcept {
+	return this->data & 0b111;
+}
 
 X11Desktop::X11Desktop() {
 	this->display = XOpenDisplay(nullptr);
@@ -58,7 +92,7 @@ void X11Desktop::send(Event event, bool flush) {
 		this->flush();
 }
 
-static const ::KeySym keysym_map[] = {
+const KeySym X11Desktop::keysym_map[KEY_COUNT] = {
 	XK_0,
 	XK_1,
 	XK_2,
@@ -177,15 +211,19 @@ static const ::KeySym keysym_map[] = {
 	XK_Super_R,
 };
 
-static constexpr std::size_t event_key_count = std::size_t(Event::Key::_COUNT);
-static_assert(event_key_count == std::size(keysym_map));
-
-static std::pair<KeyCode, unsigned int> x11_key_sym_to_code_and_mods(
-		Display *display, KeySym key_sym) noexcept {
-	const auto key_code = XKeysymToKeycode(display, key_sym);
+X11Desktop::KeyRepInfo X11Desktop::get_keyrep(Event::Key key) noexcept {
+	const auto index = std::size_t(key);
+	if (index >= X11Desktop::KEY_COUNT) [[unlikely]]
+		return { };
+	if (const auto rep = this->keyrep_cache[index]; rep)
+		return rep;
+	const auto key_sym  = keysym_map[index];
+	const auto key_code = XKeysymToKeycode(this->display, key_sym);
 	const auto key_mods =
-		XkbKeycodeToKeysym(display, key_code, 0, 0) == key_sym ? 0 : ShiftMask;
-	return std::make_pair(key_code, key_mods);
+		XkbKeycodeToKeysym(this->display, key_code, 0, 0) == key_sym ? 0 : ShiftMask;
+	const KeyRepInfo rep(key_code, key_mods);
+	this->keyrep_cache[index] = rep;
+	return rep;
 }
 
 static void x11_send_key_event(
@@ -219,13 +257,11 @@ static void x11_send_key_event(
 
 void X11Desktop::send_key(Event event) {
 	assert(event.type == Event::KEY_UP || event.type == Event::KEY_DOWN);
-	if (std::size_t(event.key) >= event_key_count) [[unlikely]]
-		return;
-	const auto key_sym = keysym_map[std::size_t(event.key)];
-	const auto [key_code, key_mods] =
-		x11_key_sym_to_code_and_mods(this->display, key_sym);
+	const auto key_rep = this->get_keyrep(event.key);
+	assert(key_rep);
 	const bool key_down = event.type == Event::KEY_DOWN ? True : False;
-	x11_send_key_event(this->display, this->root_window, key_down, key_code, key_mods);
+	x11_send_key_event(this->display, this->root_window,
+		key_down, key_rep.key_code(), key_rep.modifiers_mask());
 }
 
 void X11Desktop::flush() noexcept {
