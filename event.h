@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace vinput {
 
 // Input event.
@@ -8,6 +10,9 @@ struct Event {
 		NOP,
 		KEY_UP,
 		KEY_DOWN,
+		BUTTON_UP,
+		BUTTON_DOWN,
+		POINTER_GOTO,
 	};
 
 	enum class Key : unsigned char {
@@ -28,9 +33,22 @@ struct Event {
 		_COUNT
 	};
 
+	enum class Button : unsigned char {
+		LEFT, MIDDLE, RIGHT,
+		SCROLL_UP, SCROLL_DOWN,
+
+		_COUNT
+	};
+
+	struct PointerPosition {
+		std::uint16_t x, y;
+	};
+
 	Type type;
 	union {
 		Key key;
+		Button button;
+		PointerPosition pointer_position;
 	};
 };
 

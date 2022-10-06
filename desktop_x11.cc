@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cstdint>
 
+#include <X11/extensions/XTest.h>
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
 #include <X11/Xlib.h>
@@ -36,7 +37,9 @@ private:
 	};
 
 	static constexpr auto KEY_COUNT = std::size_t(Event::Key::_COUNT);
+	static constexpr auto BUTTON_COUNT = std::size_t(Event::Button::_COUNT);
 	static const KeySym keysym_map[KEY_COUNT];
+	static const int button_map[BUTTON_COUNT];
 
 	Display *display;
 	Window root_window;
@@ -44,6 +47,8 @@ private:
 
 	KeyRepInfo get_keyrep(Event::Key key) noexcept;
 	void send_key(Event event);
+	void send_button(Event event);
+	void send_pointer_position(Event event);
 	void flush() noexcept;
 };
 
@@ -88,6 +93,10 @@ bool X11Desktop::ready() const noexcept {
 void X11Desktop::send(Event event, bool flush) {
 	if (event.type == Event::KEY_UP || event.type == Event::KEY_DOWN)
 		this->send_key(event);
+	else if (event.type == Event::BUTTON_UP || event.type == Event::BUTTON_DOWN)
+		this->send_button(event);
+	else if (event.type == Event::POINTER_GOTO)
+		this->send_pointer_position(event);
 	if (flush)
 		this->flush();
 }
@@ -211,6 +220,14 @@ const KeySym X11Desktop::keysym_map[KEY_COUNT] = {
 	XK_Super_R,
 };
 
+const int X11Desktop::button_map[BUTTON_COUNT] = {
+	Button1,
+	Button2,
+	Button3,
+	Button4,
+	Button5,
+};
+
 X11Desktop::KeyRepInfo X11Desktop::get_keyrep(Event::Key key) noexcept {
 	const auto index = std::size_t(key);
 	if (index >= X11Desktop::KEY_COUNT) [[unlikely]]
@@ -262,6 +279,32 @@ void X11Desktop::send_key(Event event) {
 	const bool key_down = event.type == Event::KEY_DOWN ? True : False;
 	x11_send_key_event(this->display, this->root_window,
 		key_down, key_rep.key_code(), key_rep.modifiers_mask());
+}
+
+static void x11_send_button_event(
+		Display *display, bool press, int button) noexcept {
+	XTestFakeButtonEvent(display, unsigned(button), int(press), CurrentTime);
+}
+
+void X11Desktop::send_button(Event event) {
+	assert(event.type == Event::BUTTON_UP || event.type == Event::BUTTON_DOWN);
+	const bool pressed = event.type == Event::BUTTON_DOWN;
+	assert(std::size_t(event.button) < X11Desktop::BUTTON_COUNT);
+	const auto button = X11Desktop::button_map[std::size_t(event.button)];
+	x11_send_button_event(this->display, pressed, button);
+}
+
+static void x11_send_motion_event(
+		Display *display, int screen, int x, int y) noexcept {
+	XTestFakeMotionEvent(display, screen, x, y, CurrentTime);
+}
+
+void X11Desktop::send_pointer_position(Event event) {
+	assert(event.type == Event::POINTER_GOTO);
+	x11_send_motion_event(
+		this->display, CurrentTime,
+		event.pointer_position.x, event.pointer_position.y
+	);
 }
 
 void X11Desktop::flush() noexcept {

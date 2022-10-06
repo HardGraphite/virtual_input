@@ -26,6 +26,9 @@ struct Script::Impl {
 		KEY_UP,
 		KEY_DOWN,
 		KEY_PRESS,
+		BUTTON_PRESS,
+		POINTER_GOTO,
+		EXTRA_ARG,
 		_COUNT
 	};
 
@@ -60,6 +63,10 @@ private:
 
 	void command_backslash(const std::vector<const char *> &args, Script::Impl &script);
 	void command_sleep(const std::vector<const char *> &args, Script::Impl &script);
+	void command_click_left(const std::vector<const char *> &args, Script::Impl &script);
+	void command_click_middle(const std::vector<const char *> &args, Script::Impl &script);
+	void command_click_right(const std::vector<const char *> &args, Script::Impl &script);
+	void command_move_pointer(const std::vector<const char *> &args, Script::Impl &script);
 };
 
 class Script::Impl::Player {
@@ -244,7 +251,12 @@ void Script::Impl::Compiler::parse_command(
 		void (Compiler::*)(const std::vector<const char *> &, Script::Impl &);
 	command_func_t command_func;
 	switch (command) {
+	case '\\':command_func = &Compiler::command_backslash; break;
 	case '#': command_func = &Compiler::command_sleep; break;
+	case '<': command_func = &Compiler::command_click_left; break;
+	case '|': command_func = &Compiler::command_click_middle; break;
+	case '>': command_func = &Compiler::command_click_right; break;
+	case '@': command_func = &Compiler::command_move_pointer; break;
 	default: throw ScriptSyntaxError();
 	}
 
@@ -293,8 +305,50 @@ void Script::Impl::Compiler::command_sleep(
 		}
 	}
 	if (f) {
-		script.code.emplace_back(Opcode::SLEEP_SEC, unsigned(f * 1e3));
+		script.code.emplace_back(Opcode::SLEEP_MS, unsigned(f * 1e3));
 	}
+}
+
+void Script::Impl::Compiler::command_click_left(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	if (!args.empty())
+		throw ScriptSyntaxError();
+	script.code.emplace_back(Opcode::BUTTON_PRESS, unsigned(Event::Button::LEFT));
+}
+
+void Script::Impl::Compiler::command_click_middle(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	Event::Button button;
+	if (args.empty()) {
+		button = Event::Button::MIDDLE;
+	} else if (args.size() == 1 && (args[0][0] && !args[0][1])) {
+		const auto dir = args[0][0];
+		if (dir == '^')
+			button = Event::Button::SCROLL_UP;
+		else if (dir == 'v' || dir == 'V' )
+			button = Event::Button::SCROLL_DOWN;
+		else
+			throw ScriptSyntaxError();
+	} else {
+		throw ScriptSyntaxError();
+	}
+	script.code.emplace_back(Opcode::BUTTON_PRESS, unsigned(button));
+}
+
+void Script::Impl::Compiler::command_click_right(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	if (!args.empty())
+		throw ScriptSyntaxError();
+	script.code.emplace_back(Opcode::BUTTON_PRESS, unsigned(Event::Button::RIGHT));
+}
+
+void Script::Impl::Compiler::command_move_pointer(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	if (args.size() != 2)
+		throw ScriptSyntaxError();
+	const auto x = atoi(args[0]), y = atoi(args[1]);
+	script.code.emplace_back(Opcode::POINTER_GOTO, unsigned(x));
+	script.code.emplace_back(Opcode::EXTRA_ARG, unsigned(y));
 }
 
 void Script::Impl::Player::random_sleep(bool status) noexcept {
@@ -353,6 +407,27 @@ void Script::Impl::Player::operator()(const Script::Impl &script, Desktop &deskt
 				.type = Event::KEY_UP,
 				.key = static_cast<Event::Key>(operand),
 			}, true);
+			break;
+
+		case BUTTON_PRESS:
+			desktop.send({
+				.type = Event::BUTTON_DOWN,
+				.button = static_cast<Event::Button>(operand),
+			}, false);
+			desktop.send({
+				.type = Event::BUTTON_UP,
+				.button = static_cast<Event::Button>(operand),
+			}, true);
+			break;
+
+		case POINTER_GOTO:
+			desktop.send({
+				.type = Event::POINTER_GOTO,
+				.pointer_position = {
+					.x = std::uint16_t(operand),
+					.y = std::uint16_t((*code_pointer++).operand()),
+				},
+			});
 			break;
 
 		[[unlikely]] default:
