@@ -20,7 +20,10 @@ public:
 	~X11Desktop();
 
 	virtual bool ready() const noexcept override;
-	virtual void send(Event event, bool flush) override;
+	virtual void key(Key k, PressAction a) override;
+	virtual void button(Button b, PressAction a) override;
+	virtual void pointer(unsigned int x, unsigned int y) override;
+	virtual void flush() override;
 
 private:
 	class KeyRepInfo {
@@ -36,20 +39,20 @@ private:
 		std::uint16_t data;
 	};
 
-	static constexpr auto KEY_COUNT = std::size_t(Event::Key::_COUNT);
-	static constexpr auto BUTTON_COUNT = std::size_t(Event::Button::_COUNT);
+	static constexpr auto KEY_COUNT = std::size_t(Key::_COUNT);
+	static constexpr auto BUTTON_COUNT = std::size_t(Button::_COUNT);
 	static const KeySym keysym_map[KEY_COUNT];
-	static const int button_map[BUTTON_COUNT];
+	static const unsigned int button_map[BUTTON_COUNT];
 
 	Display *display;
 	Window root_window;
 	KeyRepInfo keyrep_cache[KEY_COUNT];
 
-	KeyRepInfo get_keyrep(Event::Key key) noexcept;
-	void send_key(Event event);
-	void send_button(Event event);
-	void send_pointer_position(Event event);
-	void flush() noexcept;
+	KeyRepInfo get_keyrep(Key key) noexcept;
+	void send_fake_key_event(Key key, bool press);
+	void send_fake_button_event(Button button, bool press);
+	void send_fake_motion_event(int x, int y);
+	void do_flush() noexcept;
 };
 
 }
@@ -90,15 +93,20 @@ bool X11Desktop::ready() const noexcept {
 	return this->display;
 }
 
-void X11Desktop::send(Event event, bool flush) {
-	if (event.type == Event::KEY_UP || event.type == Event::KEY_DOWN)
-		this->send_key(event);
-	else if (event.type == Event::BUTTON_UP || event.type == Event::BUTTON_DOWN)
-		this->send_button(event);
-	else if (event.type == Event::POINTER_GOTO)
-		this->send_pointer_position(event);
-	if (flush)
-		this->flush();
+void X11Desktop::key(Key k, PressAction a) {
+	this->send_fake_key_event(k, a == PressAction::Press);
+}
+
+void X11Desktop::button(Button b, PressAction a) {
+	this->send_fake_button_event(b, a == PressAction::Press);
+}
+
+void X11Desktop::pointer(unsigned int x, unsigned int y) {
+	this->send_fake_motion_event(int(x), int(y));
+}
+
+void X11Desktop::flush() {
+	this->do_flush();
 }
 
 const KeySym X11Desktop::keysym_map[KEY_COUNT] = {
@@ -220,7 +228,7 @@ const KeySym X11Desktop::keysym_map[KEY_COUNT] = {
 	XK_Super_R,
 };
 
-const int X11Desktop::button_map[BUTTON_COUNT] = {
+const unsigned int X11Desktop::button_map[BUTTON_COUNT] = {
 	Button1,
 	Button2,
 	Button3,
@@ -228,7 +236,7 @@ const int X11Desktop::button_map[BUTTON_COUNT] = {
 	Button5,
 };
 
-X11Desktop::KeyRepInfo X11Desktop::get_keyrep(Event::Key key) noexcept {
+X11Desktop::KeyRepInfo X11Desktop::get_keyrep(Key key) noexcept {
 	const auto index = std::size_t(key);
 	if (index >= X11Desktop::KEY_COUNT) [[unlikely]]
 		return { };
@@ -243,16 +251,18 @@ X11Desktop::KeyRepInfo X11Desktop::get_keyrep(Event::Key key) noexcept {
 	return rep;
 }
 
-static void x11_send_key_event(
-		Display *display, Window root_window,
-		bool press, KeyCode key_code, unsigned int key_mods) noexcept {
+void X11Desktop::send_fake_key_event(Key key, bool press) {
+	const auto key_rep = this->get_keyrep(key);
+	assert(key_rep);
+
 	Window focused_window;
 	int focused_revert;
 	XGetInputFocus(display, &focused_window, &focused_revert);
+
 	XKeyEvent key_event;
-	key_event.display = display;
+	key_event.display = this->display;
 	key_event.window = focused_window;
-	key_event.root = root_window;
+	key_event.root = this->root_window;
 	key_event.subwindow = None;
 	key_event.time = CurrentTime;
 	key_event.x = 0;
@@ -261,52 +271,28 @@ static void x11_send_key_event(
 	key_event.y_root = 0;
 	key_event.same_screen = True;
 	key_event.type = press ? KeyPress : KeyRelease;
-	key_event.keycode = key_code;
-	key_event.state = key_mods;
+	key_event.keycode = key_rep.key_code();
+	key_event.state = key_rep.modifiers_mask();
 	key_event.send_event = False;
 	key_event.serial = 0;
 	XSendEvent(
-		display, focused_window,
+		this->display, focused_window,
 		True, KeyPressMask | KeyReleaseMask,
 		reinterpret_cast<XEvent *>(&key_event)
 	);
 }
 
-void X11Desktop::send_key(Event event) {
-	assert(event.type == Event::KEY_UP || event.type == Event::KEY_DOWN);
-	const auto key_rep = this->get_keyrep(event.key);
-	assert(key_rep);
-	const bool key_down = event.type == Event::KEY_DOWN ? True : False;
-	x11_send_key_event(this->display, this->root_window,
-		key_down, key_rep.key_code(), key_rep.modifiers_mask());
+void X11Desktop::send_fake_button_event(Button button, bool press) {
+	assert(std::size_t(button) < X11Desktop::BUTTON_COUNT);
+	const auto x_button = X11Desktop::button_map[std::size_t(button)];
+	const int x_press = press ? True : False;
+	XTestFakeButtonEvent(this->display, x_button, x_press, CurrentTime);
 }
 
-static void x11_send_button_event(
-		Display *display, bool press, int button) noexcept {
-	XTestFakeButtonEvent(display, unsigned(button), int(press), CurrentTime);
+void X11Desktop::send_fake_motion_event(int x, int y) {
+	XTestFakeMotionEvent(this->display, 0, x, y, CurrentTime);
 }
 
-void X11Desktop::send_button(Event event) {
-	assert(event.type == Event::BUTTON_UP || event.type == Event::BUTTON_DOWN);
-	const bool pressed = event.type == Event::BUTTON_DOWN;
-	assert(std::size_t(event.button) < X11Desktop::BUTTON_COUNT);
-	const auto button = X11Desktop::button_map[std::size_t(event.button)];
-	x11_send_button_event(this->display, pressed, button);
-}
-
-static void x11_send_motion_event(
-		Display *display, int screen, int x, int y) noexcept {
-	XTestFakeMotionEvent(display, screen, x, y, CurrentTime);
-}
-
-void X11Desktop::send_pointer_position(Event event) {
-	assert(event.type == Event::POINTER_GOTO);
-	x11_send_motion_event(
-		this->display, CurrentTime,
-		event.pointer_position.x, event.pointer_position.y
-	);
-}
-
-void X11Desktop::flush() noexcept {
+void X11Desktop::do_flush() noexcept {
 	XFlush(this->display);
 }

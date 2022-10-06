@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "desktop.h"
-#include "event.h"
 
 using namespace vinput;
 
@@ -25,10 +24,11 @@ struct Script::Impl {
 		SLEEP_SEC,
 		KEY_UP,
 		KEY_DOWN,
-		KEY_PRESS,
-		BUTTON_PRESS,
+		KEY_CLICK,
+		BUTTON_UP,
+		BUTTON_DOWN,
+		BUTTON_CLICK,
 		POINTER_GOTO,
-		EXTRA_ARG,
 		_COUNT
 	};
 
@@ -47,6 +47,7 @@ struct Script::Impl {
 	class Player;
 
 	std::vector<Instruction> code;
+	std::vector<std::pair<unsigned int, unsigned int>> positions;
 };
 
 class Script::Impl::Compiler {
@@ -122,107 +123,107 @@ void Script::Impl::Compiler::operator()(std::istream &source, Script::Impl &scri
 
 bool Script::Impl::Compiler::next_instr(std::istream &source, Script::Impl &script) {
 	auto &code = script.code;
-	Event::Key key_code;
+	Desktop::Key key_code;
 
 	switch (const auto ch = source.get(); static_cast<char>(ch)) {
-	case '\t': key_code = Event::Key::TAB; break;
-	case '\n': key_code = Event::Key::RETURN; break;
-	case '\r': key_code = Event::Key::RETURN; break;
-	case ' ': key_code = Event::Key::SPACE; break;
-	case '!': key_code = Event::Key::EXCLAM; break;
-	case '"': key_code = Event::Key::QUOTATION; break;
-	case '#': key_code = Event::Key::NUMBERSIGN; break;
-	case '$': key_code = Event::Key::DOLLAR; break;
-	case '%': key_code = Event::Key::PERCENT; break;
-	case '&': key_code = Event::Key::AMPERSAND; break;
-	case '\'': key_code = Event::Key::APOSTROPHE; break;
-	case '(': key_code = Event::Key::PARENLEFT; break;
-	case ')': key_code = Event::Key::PARENRIGHT; break;
-	case '*': key_code = Event::Key::ASTERISK; break;
-	case '+': key_code = Event::Key::PLUS; break;
-	case ',': key_code = Event::Key::COMMA; break;
-	case '-': key_code = Event::Key::MINUS; break;
-	case '.': key_code = Event::Key::PERIOD; break;
-	case '/': key_code = Event::Key::SLASH; break;
-	case '0': key_code = Event::Key::_0; break;
-	case '1': key_code = Event::Key::_1; break;
-	case '2': key_code = Event::Key::_2; break;
-	case '3': key_code = Event::Key::_3; break;
-	case '4': key_code = Event::Key::_4; break;
-	case '5': key_code = Event::Key::_5; break;
-	case '6': key_code = Event::Key::_6; break;
-	case '7': key_code = Event::Key::_7; break;
-	case '8': key_code = Event::Key::_8; break;
-	case '9': key_code = Event::Key::_9; break;
-	case ':': key_code = Event::Key::COLON; break;
-	case ';': key_code = Event::Key::SEMICOLON; break;
-	case '<': key_code = Event::Key::LESS; break;
-	case '=': key_code = Event::Key::EQUAL; break;
-	case '>': key_code = Event::Key::GREATER; break;
-	case '?': key_code = Event::Key::QUESTION; break;
-	case '@': key_code = Event::Key::AT; break;
-	case 'A': key_code = Event::Key::A; break;
-	case 'B': key_code = Event::Key::B; break;
-	case 'C': key_code = Event::Key::C; break;
-	case 'D': key_code = Event::Key::D; break;
-	case 'E': key_code = Event::Key::E; break;
-	case 'F': key_code = Event::Key::F; break;
-	case 'G': key_code = Event::Key::G; break;
-	case 'H': key_code = Event::Key::H; break;
-	case 'I': key_code = Event::Key::I; break;
-	case 'J': key_code = Event::Key::J; break;
-	case 'K': key_code = Event::Key::K; break;
-	case 'L': key_code = Event::Key::L; break;
-	case 'M': key_code = Event::Key::M; break;
-	case 'N': key_code = Event::Key::N; break;
-	case 'O': key_code = Event::Key::O; break;
-	case 'P': key_code = Event::Key::P; break;
-	case 'Q': key_code = Event::Key::Q; break;
-	case 'R': key_code = Event::Key::R; break;
-	case 'S': key_code = Event::Key::S; break;
-	case 'T': key_code = Event::Key::T; break;
-	case 'U': key_code = Event::Key::U; break;
-	case 'V': key_code = Event::Key::V; break;
-	case 'W': key_code = Event::Key::W; break;
-	case 'X': key_code = Event::Key::X; break;
-	case 'Y': key_code = Event::Key::Y; break;
-	case 'Z': key_code = Event::Key::Z; break;
-	case '[': key_code = Event::Key::BRACKETLEFT; break;
-	case ']': key_code = Event::Key::BRACKETRIGHT; break;
-	case '^': key_code = Event::Key::ASCIICIRCUM; break;
-	case '_': key_code = Event::Key::UNDERSCORE; break;
-	case '`': key_code = Event::Key::GRAVE; break;
-	case 'a': key_code = Event::Key::a; break;
-	case 'b': key_code = Event::Key::b; break;
-	case 'c': key_code = Event::Key::c; break;
-	case 'd': key_code = Event::Key::d; break;
-	case 'e': key_code = Event::Key::e; break;
-	case 'f': key_code = Event::Key::f; break;
-	case 'g': key_code = Event::Key::g; break;
-	case 'h': key_code = Event::Key::h; break;
-	case 'i': key_code = Event::Key::i; break;
-	case 'j': key_code = Event::Key::j; break;
-	case 'k': key_code = Event::Key::k; break;
-	case 'l': key_code = Event::Key::l; break;
-	case 'm': key_code = Event::Key::m; break;
-	case 'n': key_code = Event::Key::n; break;
-	case 'o': key_code = Event::Key::o; break;
-	case 'p': key_code = Event::Key::p; break;
-	case 'q': key_code = Event::Key::q; break;
-	case 'r': key_code = Event::Key::r; break;
-	case 's': key_code = Event::Key::s; break;
-	case 't': key_code = Event::Key::t; break;
-	case 'u': key_code = Event::Key::u; break;
-	case 'v': key_code = Event::Key::v; break;
-	case 'w': key_code = Event::Key::w; break;
-	case 'x': key_code = Event::Key::x; break;
-	case 'y': key_code = Event::Key::y; break;
-	case 'z': key_code = Event::Key::z; break;
-	case '{': key_code = Event::Key::BRACELEFT; break;
-	case '|': key_code = Event::Key::BAR; break;
-	case '}': key_code = Event::Key::BRACERIGHT; break;
-	case '~': key_code = Event::Key::ASCIITILDE; break;
-	case 0x7f: key_code = Event::Key::BACKSPACE; break;
+	case '\t': key_code = Desktop::Key::TAB; break;
+	case '\n': key_code = Desktop::Key::RETURN; break;
+	case '\r': key_code = Desktop::Key::RETURN; break;
+	case ' ': key_code = Desktop::Key::SPACE; break;
+	case '!': key_code = Desktop::Key::EXCLAM; break;
+	case '"': key_code = Desktop::Key::QUOTATION; break;
+	case '#': key_code = Desktop::Key::NUMBERSIGN; break;
+	case '$': key_code = Desktop::Key::DOLLAR; break;
+	case '%': key_code = Desktop::Key::PERCENT; break;
+	case '&': key_code = Desktop::Key::AMPERSAND; break;
+	case '\'': key_code = Desktop::Key::APOSTROPHE; break;
+	case '(': key_code = Desktop::Key::PARENLEFT; break;
+	case ')': key_code = Desktop::Key::PARENRIGHT; break;
+	case '*': key_code = Desktop::Key::ASTERISK; break;
+	case '+': key_code = Desktop::Key::PLUS; break;
+	case ',': key_code = Desktop::Key::COMMA; break;
+	case '-': key_code = Desktop::Key::MINUS; break;
+	case '.': key_code = Desktop::Key::PERIOD; break;
+	case '/': key_code = Desktop::Key::SLASH; break;
+	case '0': key_code = Desktop::Key::_0; break;
+	case '1': key_code = Desktop::Key::_1; break;
+	case '2': key_code = Desktop::Key::_2; break;
+	case '3': key_code = Desktop::Key::_3; break;
+	case '4': key_code = Desktop::Key::_4; break;
+	case '5': key_code = Desktop::Key::_5; break;
+	case '6': key_code = Desktop::Key::_6; break;
+	case '7': key_code = Desktop::Key::_7; break;
+	case '8': key_code = Desktop::Key::_8; break;
+	case '9': key_code = Desktop::Key::_9; break;
+	case ':': key_code = Desktop::Key::COLON; break;
+	case ';': key_code = Desktop::Key::SEMICOLON; break;
+	case '<': key_code = Desktop::Key::LESS; break;
+	case '=': key_code = Desktop::Key::EQUAL; break;
+	case '>': key_code = Desktop::Key::GREATER; break;
+	case '?': key_code = Desktop::Key::QUESTION; break;
+	case '@': key_code = Desktop::Key::AT; break;
+	case 'A': key_code = Desktop::Key::A; break;
+	case 'B': key_code = Desktop::Key::B; break;
+	case 'C': key_code = Desktop::Key::C; break;
+	case 'D': key_code = Desktop::Key::D; break;
+	case 'E': key_code = Desktop::Key::E; break;
+	case 'F': key_code = Desktop::Key::F; break;
+	case 'G': key_code = Desktop::Key::G; break;
+	case 'H': key_code = Desktop::Key::H; break;
+	case 'I': key_code = Desktop::Key::I; break;
+	case 'J': key_code = Desktop::Key::J; break;
+	case 'K': key_code = Desktop::Key::K; break;
+	case 'L': key_code = Desktop::Key::L; break;
+	case 'M': key_code = Desktop::Key::M; break;
+	case 'N': key_code = Desktop::Key::N; break;
+	case 'O': key_code = Desktop::Key::O; break;
+	case 'P': key_code = Desktop::Key::P; break;
+	case 'Q': key_code = Desktop::Key::Q; break;
+	case 'R': key_code = Desktop::Key::R; break;
+	case 'S': key_code = Desktop::Key::S; break;
+	case 'T': key_code = Desktop::Key::T; break;
+	case 'U': key_code = Desktop::Key::U; break;
+	case 'V': key_code = Desktop::Key::V; break;
+	case 'W': key_code = Desktop::Key::W; break;
+	case 'X': key_code = Desktop::Key::X; break;
+	case 'Y': key_code = Desktop::Key::Y; break;
+	case 'Z': key_code = Desktop::Key::Z; break;
+	case '[': key_code = Desktop::Key::BRACKETLEFT; break;
+	case ']': key_code = Desktop::Key::BRACKETRIGHT; break;
+	case '^': key_code = Desktop::Key::ASCIICIRCUM; break;
+	case '_': key_code = Desktop::Key::UNDERSCORE; break;
+	case '`': key_code = Desktop::Key::GRAVE; break;
+	case 'a': key_code = Desktop::Key::a; break;
+	case 'b': key_code = Desktop::Key::b; break;
+	case 'c': key_code = Desktop::Key::c; break;
+	case 'd': key_code = Desktop::Key::d; break;
+	case 'e': key_code = Desktop::Key::e; break;
+	case 'f': key_code = Desktop::Key::f; break;
+	case 'g': key_code = Desktop::Key::g; break;
+	case 'h': key_code = Desktop::Key::h; break;
+	case 'i': key_code = Desktop::Key::i; break;
+	case 'j': key_code = Desktop::Key::j; break;
+	case 'k': key_code = Desktop::Key::k; break;
+	case 'l': key_code = Desktop::Key::l; break;
+	case 'm': key_code = Desktop::Key::m; break;
+	case 'n': key_code = Desktop::Key::n; break;
+	case 'o': key_code = Desktop::Key::o; break;
+	case 'p': key_code = Desktop::Key::p; break;
+	case 'q': key_code = Desktop::Key::q; break;
+	case 'r': key_code = Desktop::Key::r; break;
+	case 's': key_code = Desktop::Key::s; break;
+	case 't': key_code = Desktop::Key::t; break;
+	case 'u': key_code = Desktop::Key::u; break;
+	case 'v': key_code = Desktop::Key::v; break;
+	case 'w': key_code = Desktop::Key::w; break;
+	case 'x': key_code = Desktop::Key::x; break;
+	case 'y': key_code = Desktop::Key::y; break;
+	case 'z': key_code = Desktop::Key::z; break;
+	case '{': key_code = Desktop::Key::BRACELEFT; break;
+	case '|': key_code = Desktop::Key::BAR; break;
+	case '}': key_code = Desktop::Key::BRACERIGHT; break;
+	case '~': key_code = Desktop::Key::ASCIITILDE; break;
+	case 0x7f: key_code = Desktop::Key::BACKSPACE; break;
 
 	case '\\':
 		this->parse_command(source, script);
@@ -234,7 +235,7 @@ bool Script::Impl::Compiler::next_instr(std::istream &source, Script::Impl &scri
 		throw ScriptSyntaxError();
 	}
 
-	code.emplace_back(Impl::Opcode::KEY_PRESS, unsigned(key_code));
+	code.emplace_back(Impl::Opcode::KEY_CLICK, unsigned(key_code));
 	return true;
 }
 
@@ -282,7 +283,7 @@ void Script::Impl::Compiler::command_backslash(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (!args.empty())
 		throw ScriptSyntaxError();
-	script.code.emplace_back(Opcode::KEY_PRESS, unsigned(Event::Key::BACKSLASH));
+	script.code.emplace_back(Opcode::KEY_CLICK, unsigned(Desktop::Key::BACKSLASH));
 }
 
 void Script::Impl::Compiler::command_sleep(
@@ -313,33 +314,33 @@ void Script::Impl::Compiler::command_click_left(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (!args.empty())
 		throw ScriptSyntaxError();
-	script.code.emplace_back(Opcode::BUTTON_PRESS, unsigned(Event::Button::LEFT));
+	script.code.emplace_back(Opcode::BUTTON_CLICK, unsigned(Desktop::Button::LEFT));
 }
 
 void Script::Impl::Compiler::command_click_middle(
 		const std::vector<const char *> &args, Script::Impl &script) {
-	Event::Button button;
+	Desktop::Button button;
 	if (args.empty()) {
-		button = Event::Button::MIDDLE;
+		button = Desktop::Button::MIDDLE;
 	} else if (args.size() == 1 && (args[0][0] && !args[0][1])) {
 		const auto dir = args[0][0];
 		if (dir == '^')
-			button = Event::Button::SCROLL_UP;
+			button = Desktop::Button::SCROLL_UP;
 		else if (dir == 'v' || dir == 'V' )
-			button = Event::Button::SCROLL_DOWN;
+			button = Desktop::Button::SCROLL_DOWN;
 		else
 			throw ScriptSyntaxError();
 	} else {
 		throw ScriptSyntaxError();
 	}
-	script.code.emplace_back(Opcode::BUTTON_PRESS, unsigned(button));
+	script.code.emplace_back(Opcode::BUTTON_CLICK, unsigned(button));
 }
 
 void Script::Impl::Compiler::command_click_right(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (!args.empty())
 		throw ScriptSyntaxError();
-	script.code.emplace_back(Opcode::BUTTON_PRESS, unsigned(Event::Button::RIGHT));
+	script.code.emplace_back(Opcode::BUTTON_CLICK, unsigned(Desktop::Button::RIGHT));
 }
 
 void Script::Impl::Compiler::command_move_pointer(
@@ -347,8 +348,9 @@ void Script::Impl::Compiler::command_move_pointer(
 	if (args.size() != 2)
 		throw ScriptSyntaxError();
 	const auto x = atoi(args[0]), y = atoi(args[1]);
-	script.code.emplace_back(Opcode::POINTER_GOTO, unsigned(x));
-	script.code.emplace_back(Opcode::EXTRA_ARG, unsigned(y));
+	const auto index = script.positions.size();
+	script.positions.emplace_back(x >= 0 ? unsigned(x) : 0u, y >= 0 ? unsigned(y) : 0u);
+	script.code.emplace_back(Opcode::POINTER_GOTO, unsigned(index));
 }
 
 void Script::Impl::Player::random_sleep(bool status) noexcept {
@@ -374,66 +376,78 @@ void Script::Impl::Player::operator()(const Script::Impl &script, Desktop &deskt
 			using enum Impl::Opcode;
 
 		case NOP:
-			break;
+			continue;
 
 		case SLEEP_MS:
 			this->sleep_ms(operand);
-			break;
+			continue;
 
 		case SLEEP_SEC:
 			this->sleep_ms(operand * 1000);
-			break;
+			continue;
 
 		case KEY_UP:
-			desktop.send({
-				.type = Event::KEY_UP,
-				.key = static_cast<Event::Key>(operand),
-			});
+			desktop.key(
+				static_cast<Desktop::Key>(operand),
+				Desktop::PressAction::Release
+			);
 			break;
 
 		case KEY_DOWN:
-			desktop.send({
-				.type = Event::KEY_DOWN,
-				.key = static_cast<Event::Key>(operand),
-			});
+			desktop.key(
+				static_cast<Desktop::Key>(operand),
+				Desktop::PressAction::Press
+			);
 			break;
 
-		case KEY_PRESS:
-			desktop.send({
-				.type = Event::KEY_DOWN,
-				.key = static_cast<Event::Key>(operand),
-			}, false);
-			desktop.send({
-				.type = Event::KEY_UP,
-				.key = static_cast<Event::Key>(operand),
-			}, true);
+		case KEY_CLICK:
+			desktop.key(
+				static_cast<Desktop::Key>(operand),
+				Desktop::PressAction::Press
+			);
+			desktop.key(
+				static_cast<Desktop::Key>(operand),
+				Desktop::PressAction::Release
+			);
 			break;
 
-		case BUTTON_PRESS:
-			desktop.send({
-				.type = Event::BUTTON_DOWN,
-				.button = static_cast<Event::Button>(operand),
-			}, false);
-			desktop.send({
-				.type = Event::BUTTON_UP,
-				.button = static_cast<Event::Button>(operand),
-			}, true);
+		case BUTTON_UP:
+			desktop.button(
+				static_cast<Desktop::Button>(operand),
+				Desktop::PressAction::Release
+			);
+			break;
+
+		case BUTTON_DOWN:
+			desktop.button(
+				static_cast<Desktop::Button>(operand),
+				Desktop::PressAction::Press
+			);
+			break;
+
+		case BUTTON_CLICK:
+			desktop.button(
+				static_cast<Desktop::Button>(operand),
+				Desktop::PressAction::Press
+			);
+			desktop.button(
+				static_cast<Desktop::Button>(operand),
+				Desktop::PressAction::Release
+			);
 			break;
 
 		case POINTER_GOTO:
-			desktop.send({
-				.type = Event::POINTER_GOTO,
-				.pointer_position = {
-					.x = std::uint16_t(operand),
-					.y = std::uint16_t((*code_pointer++).operand()),
-				},
-			});
+			desktop.pointer(
+				script.positions[operand].first,
+				script.positions[operand].second
+			);
 			break;
 
 		[[unlikely]] default:
-			break;
+			continue;
 		}
 
+		desktop.flush();
 		this->sleep_ms(50);
 	}
 }
@@ -476,8 +490,9 @@ void Script::append(std::istream &source) {
 }
 
 void Script::clear() noexcept {
-	auto &code = this->_impl->code;
-	code.clear();
+	auto &impl = *this->_impl;
+	impl.code.clear();
+	impl.positions.clear();
 }
 
 void Script::play(Desktop &desktop) const {
