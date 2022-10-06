@@ -63,6 +63,9 @@ private:
 	void parse_command(std::istream &source, Script::Impl &script);
 
 	void command_backslash(const std::vector<const char *> &args, Script::Impl &script);
+	void command_enter(const std::vector<const char *> &args, Script::Impl &script);
+	void command_tab(const std::vector<const char *> &args, Script::Impl &script);
+	void command_space(const std::vector<const char *> &args, Script::Impl &script);
 	void command_sleep(const std::vector<const char *> &args, Script::Impl &script);
 	void command_click_left(const std::vector<const char *> &args, Script::Impl &script);
 	void command_click_middle(const std::vector<const char *> &args, Script::Impl &script);
@@ -109,10 +112,20 @@ unsigned int Script::Impl::Instruction::operand() const noexcept {
 
 void Script::Impl::Compiler::print_doc(std::ostream &out) noexcept {
 	using namespace std::string_view_literals;
-	const auto doc = R"%%(
-script  = key | command ;
-key     = ALPHA | DIGIT | PUNCT ;
-command = "\" ( CMD_PUNCT | ( "[" CMD_PUNCT ":" ARG1 "," ... "]" ) ) ;
+	const auto doc = R"%%((* vinput script *)
+script = { key | command } ;
+key    = ALPHA | DIGIT | PUNCT ;
+command
+	= "\\"  (* backslash key *)
+	| "\n" | "\r"  (* enter key *)
+	| "\t"  (* tab key *)
+	| "\s" (* space key *)
+	| "\#" | ("\[#" FLOAT "]")  (* sleep for 1 or FLOAT seconds *)
+	| "\<"  (* left click *)
+	| "\|" | "\[|^]" | "\[|v]"  (* middle click / scroll up / scroll down *)
+	| "\>"  (* right click *)
+	| "\[@" INT "," INT "]"  (* move pointer to the coordinate *)
+	;
 )%%"sv;
 	out.write(doc.data(), doc.length());
 }
@@ -126,10 +139,10 @@ bool Script::Impl::Compiler::next_instr(std::istream &source, Script::Impl &scri
 	Desktop::Key key_code;
 
 	switch (const auto ch = source.get(); static_cast<char>(ch)) {
-	case '\t': key_code = Desktop::Key::TAB; break;
-	case '\n': key_code = Desktop::Key::RETURN; break;
-	case '\r': key_code = Desktop::Key::RETURN; break;
-	case ' ': key_code = Desktop::Key::SPACE; break;
+	case '\t': if (ignore_space) return true; key_code = Desktop::Key::TAB; break;
+	case '\n': if (ignore_space) return true; key_code = Desktop::Key::RETURN; break;
+	case '\r': if (ignore_space) return true; key_code = Desktop::Key::RETURN; break;
+	case ' ': if (ignore_space) return true; key_code = Desktop::Key::SPACE; break;
 	case '!': key_code = Desktop::Key::EXCLAM; break;
 	case '"': key_code = Desktop::Key::QUOTATION; break;
 	case '#': key_code = Desktop::Key::NUMBERSIGN; break;
@@ -253,6 +266,9 @@ void Script::Impl::Compiler::parse_command(
 	command_func_t command_func;
 	switch (command) {
 	case '\\':command_func = &Compiler::command_backslash; break;
+	case 'n': case 'r': command_func = &Compiler::command_enter; break;
+	case 't': command_func = &Compiler::command_tab; break;
+	case 's': command_func = &Compiler::command_space; break;
 	case '#': command_func = &Compiler::command_sleep; break;
 	case '<': command_func = &Compiler::command_click_left; break;
 	case '|': command_func = &Compiler::command_click_middle; break;
@@ -286,8 +302,34 @@ void Script::Impl::Compiler::command_backslash(
 	script.code.emplace_back(Opcode::KEY_CLICK, unsigned(Desktop::Key::BACKSLASH));
 }
 
+void Script::Impl::Compiler::command_enter(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	if (!args.empty())
+		throw ScriptSyntaxError();
+	script.code.emplace_back(Opcode::KEY_CLICK, unsigned(Desktop::Key::RETURN));
+}
+
+void Script::Impl::Compiler::command_tab(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	if (!args.empty())
+		throw ScriptSyntaxError();
+	script.code.emplace_back(Opcode::KEY_CLICK, unsigned(Desktop::Key::TAB));
+}
+
+void Script::Impl::Compiler::command_space(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	if (!args.empty())
+		throw ScriptSyntaxError();
+	script.code.emplace_back(Opcode::KEY_CLICK, unsigned(Desktop::Key::SPACE));
+}
+
 void Script::Impl::Compiler::command_sleep(
 		const std::vector<const char *> &args, Script::Impl &script) {
+	if (args.empty()) {
+		script.code.emplace_back(Opcode::SLEEP_SEC, 1);
+		return;
+	}
+
 	if (args.size() != 1)
 		throw ScriptSyntaxError();
 	const auto time = std::atof(args[0]);
@@ -464,6 +506,7 @@ void Script::Impl::Player::sleep_ms(unsigned int time_ms) noexcept {
 }
 
 bool Script::random_sleep = true;
+bool Script::ignore_space = false;
 
 Script::Script() noexcept : _impl(new Impl) {
 }

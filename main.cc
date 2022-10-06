@@ -24,9 +24,20 @@ static int oh_help(void *, const argparse_option_t *, const char *) noexcept {
 	std::exit(EXIT_SUCCESS);
 }
 
+static int oh_help_script(void *, const argparse_option_t *, const char *) noexcept {
+	vinput::Script::print_doc(std::cout);
+	std::exit(EXIT_SUCCESS);
+}
+
 static int oh_no_rand_sleep(
 		void *, const argparse_option_t *, const char *) noexcept {
 	vinput::Script::random_sleep = false;
+	return 0;
+}
+
+static int oh_ignore_space(
+		void *, const argparse_option_t *, const char *) noexcept {
+	vinput::Script::ignore_space = true;
 	return 0;
 }
 
@@ -47,15 +58,18 @@ static int oh_file(
 
 static const argparse_option_t options[] = {
 	{'h', "help", nullptr, "print help message and exit", oh_help},
+	{0, "help-script", nullptr, "print script syntax and exit", oh_help_script},
 	{0, "no-rand-sleep", nullptr,
 		"disable random sleep time difference", oh_no_rand_sleep},
+	{0, "ignore-space", nullptr,
+		"ignore spaces (0x09, 0x0a, 0x0d, 0x20) in script", oh_ignore_space},
 	{0, nullptr, "FILE", nullptr, oh_file},
 	{0, nullptr, nullptr, nullptr, nullptr},
 };
 
 static const argparse_program_t program = {
 	.name = "vinput",
-	.usage = "[OPTION...] [FILE|-]*",
+	.usage = "[OPTION...] [SCRIPT_FILE|-]*",
 	.help = "virtual input, sending fake input events to the display server",
 	.opts = options,
 };
