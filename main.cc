@@ -8,17 +8,28 @@
 #include "script.h"
 #include "desktops.h"
 
-static void parse_args(int argc, char *argv[], vinput::Script &script);
+using namespace vinput;
+
+static void parse_args(int argc, char *argv[], Desktop *&desktop, Script &script);
 
 int main(int argc, char *argv[]) {
-	vinput::Script script;
-	parse_args(argc, argv, script);
-	auto &desktop = vinput::connect_current_desktop();
-	script.play(desktop);
-	vinput::disconnect_desktop(desktop);
+	Desktop *desktop = nullptr;
+	Script script;
+	parse_args(argc, argv, desktop, script);
+	script.play(*desktop);
+	disconnect_desktop(desktop);
 }
 
 static void print_program_help() noexcept;
+
+namespace {
+
+struct ArgParseContext {
+	Desktop *&desktop;
+	Script &script;
+};
+
+}
 
 static int oh_help(void *, const argparse_option_t *, const char *) noexcept {
 	print_program_help();
@@ -26,13 +37,21 @@ static int oh_help(void *, const argparse_option_t *, const char *) noexcept {
 }
 
 static int oh_help_script(void *, const argparse_option_t *, const char *) noexcept {
-	vinput::Script::print_doc(std::cout);
+	Script::print_doc(std::cout);
 	std::exit(EXIT_SUCCESS);
+}
+
+static int oh_test(void *data, const argparse_option_t *, const char *) noexcept {
+	auto &desktop = static_cast<ArgParseContext *>(data)->desktop;
+	if (desktop)
+		disconnect_desktop(desktop);
+	desktop = connect_test_desktop();
+	return 0;
 }
 
 static int oh_trace_pointer(
 		void *data, const argparse_option_t *, const char *) noexcept {
-	auto &script = *static_cast<vinput::Script *>(data);
+	auto &script = static_cast<ArgParseContext *>(data)->script;
 	std::istringstream ss(R"(\{\[?!]\})");
 	script.append(ss);
 	return 0;
@@ -40,19 +59,19 @@ static int oh_trace_pointer(
 
 static int oh_no_rand_sleep(
 		void *, const argparse_option_t *, const char *) noexcept {
-	vinput::Script::random_sleep = false;
+	Script::random_sleep = false;
 	return 0;
 }
 
 static int oh_ignore_space(
 		void *, const argparse_option_t *, const char *) noexcept {
-	vinput::Script::ignore_space = true;
+	Script::ignore_space = true;
 	return 0;
 }
 
 static int oh_file(
 		void *data, const argparse_option_t *, const char *arg) noexcept {
-	auto &script = *static_cast<vinput::Script *>(data);
+	auto &script = static_cast<ArgParseContext *>(data)->script;
 	if (!std::strcmp(arg, "-")) {
 		script.append(std::cin);
 	} else {
@@ -68,6 +87,7 @@ static int oh_file(
 static const argparse_option_t options[] = {
 	{'h', "help", nullptr, "print help message and exit", oh_help},
 	{0, "help-script", nullptr, "print script syntax and exit", oh_help_script},
+	{'t', "test", nullptr, "print instructions instead of executing them", oh_test},
 	{'p', "trace-pointer", nullptr,
 		"trace pointer position and print to stdout", oh_trace_pointer},
 	{0, "no-rand-sleep", nullptr,
@@ -91,9 +111,16 @@ static void print_program_help() noexcept {
 	argparse_help(&program);
 }
 
-static void parse_args(int argc, char *argv[], vinput::Script &script) {
-	const auto ap_status = argparse_parse(options, argc, argv, &script);
+static void parse_args(int argc, char *argv[], Desktop *&desktop, Script &script) {
+	desktop = nullptr;
+	ArgParseContext ctx = {
+		.desktop = desktop,
+		.script = script,
+	};
+	const auto ap_status = argparse_parse(options, argc, argv, &ctx);
 	if (!ap_status) {
+		if (!desktop)
+			desktop = connect_current_desktop();
 		if (script.empty())
 			script.append(std::cin);
 		return;

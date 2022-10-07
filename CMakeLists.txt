@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
-if(NOT DEFINED CMAKE_BUILD_TYPE AND NOT DEFINED CMAKE_CONFIGURATION_TYPES)
+if(NOT CMAKE_BUILD_TYPE AND NOT DEFINED CMAKE_CONFIGURATION_TYPES)
 	set(CMAKE_BUILD_TYPE "Release")
 	message(STATUS "Set build type to ${CMAKE_BUILD_TYPE}")
 endif()
@@ -38,6 +38,7 @@ list(FILTER vinput_common_src EXCLUDE REGEX "desktop_[a-z0-9]+\\.cc")
 
 add_executable(vinput ${vinput_common_src})
 
+target_sources(vinput PRIVATE "desktop_test.cc")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	if(NOT DEFINED DISPLAY_SERVER)
 		set(DISPLAY_SERVER "x11")

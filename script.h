@@ -6,7 +6,7 @@
 namespace vinput {
 
 // Input action script.
-class Script {
+class Script final {
 public:
 	static bool random_sleep; // Default: true
 	static bool ignore_space; // Default: false
@@ -15,11 +15,11 @@ public:
 
 	Script() noexcept;
 	Script(std::istream &source);
-	Script(Script &&) = delete;
+	Script(Script &&other) noexcept;
+	Script(const Script &) = delete;
 	~Script();
 
-	Script(const Script &) = delete;
-	Script &operator=(Script &&) = delete;
+	Script &operator=(Script &&other) noexcept;
 	Script &operator=(const Script &) = delete;
 
 	bool empty() const noexcept;

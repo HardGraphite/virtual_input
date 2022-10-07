@@ -702,8 +702,19 @@ Script::Script(std::istream &source) : Script() {
 	this->append(source);
 }
 
+Script::Script(Script &&other) noexcept : _impl(other._impl) {
+	other._impl = nullptr;
+}
+
 Script::~Script() {
-	delete this->_impl;
+	if (this->_impl)
+		delete this->_impl;
+}
+
+Script &Script::operator=(Script &&other) noexcept {
+	this->~Script();
+	this->_impl = other._impl;
+	return *this;
 }
 
 void Script::print_doc(std::ostream &out) noexcept {
