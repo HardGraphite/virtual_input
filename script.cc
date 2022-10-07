@@ -4,7 +4,9 @@
 #include <chrono>
 #include <cctype>
 #include <cmath>
+#include <csignal>
 #include <cstdint>
+#include <iostream>
 #include <istream>
 #include <ostream>
 #include <random>
@@ -19,7 +21,6 @@ using namespace vinput;
 
 struct Script::Impl {
 	enum class Opcode : unsigned char {
-		NOP,
 		SLEEP_MS,
 		SLEEP_SEC,
 		KEY_UP,
@@ -29,6 +30,9 @@ struct Script::Impl {
 		BUTTON_DOWN,
 		BUTTON_CLICK,
 		POINTER_GOTO,
+		POINTER_WHERE,
+		LOOP_BEGIN,
+		LOOP_END,
 		_COUNT
 	};
 
@@ -71,29 +75,59 @@ private:
 	void command_click_middle(const std::vector<const char *> &args, Script::Impl &script);
 	void command_click_right(const std::vector<const char *> &args, Script::Impl &script);
 	void command_move_pointer(const std::vector<const char *> &args, Script::Impl &script);
+	void command_find_pointer(const std::vector<const char *> &args, Script::Impl &script);
+	void command_begin_loop(const std::vector<const char *> &args, Script::Impl &script);
+	void command_end_loop(const std::vector<const char *> &args, Script::Impl &script);
 };
 
 class Script::Impl::Player {
 public:
+	Player() noexcept;
+	Player(const Player &) = delete;
+	Player(Player &&) = delete;
+	~Player();
+	Player &operator=(const Player &) = delete;
+	Player &operator=(Player &&) = delete;
+
 	void random_sleep(bool status) noexcept;
 
 	void operator()(const Script::Impl &script, Desktop &desktop);
 
 private:
+	class StopToken {
+	public:
+		void set() noexcept { state = true; }
+		void clear() noexcept { state = false; }
+		bool test() const noexcept { return state; }
+
+	private:
+		bool state = false;
+	};
+
 	struct Random {
 		std::mt19937 rand_gen;
 		std::normal_distribution<double> norm_dist;
 	};
 
-	Random *random = nullptr;
+	struct LoopBlock {
+		const Instruction *begin;
+		std::size_t times;
+	};
+
+	static StopToken stop_token;
+
+	Random *random;
+	std::vector<LoopBlock> loops;
 
 	void sleep_ms(unsigned int time_ms) noexcept;
+	void print_pointer(const Desktop &desktop, unsigned int flags) noexcept;
 };
 
 Script::Impl::Instruction::Instruction(Opcode opcode, unsigned int operand) noexcept {
 	static_assert(std::size_t(Opcode::_COUNT) <= 16);
 	this->data = std::uint16_t(static_cast<unsigned char>(opcode) | (operand << 4));
-	assert(this->opcode() == opcode && this->operand() == operand);
+	assert(this->opcode() == opcode);
+	assert(this->operand() == operand);
 }
 
 Script::Impl::Instruction &
@@ -125,6 +159,9 @@ command
 	| "\|" | "\[|^]" | "\[|v]"  (* middle click / scroll up / scroll down *)
 	| "\>"  (* right click *)
 	| "\[@" INT "," INT "]"  (* move pointer to the coordinate *)
+	| "\?" | "\[?!]"  (* get pointer coordinate and print / print without LF *)
+	| "\{" | "\[{" INT "]"  (* begin loop forever / INT times (INT <= 0 means forever) *)
+	| "\}"  (* end loop *)
 	;
 )%%"sv;
 	out.write(doc.data(), doc.length());
@@ -274,6 +311,9 @@ void Script::Impl::Compiler::parse_command(
 	case '|': command_func = &Compiler::command_click_middle; break;
 	case '>': command_func = &Compiler::command_click_right; break;
 	case '@': command_func = &Compiler::command_move_pointer; break;
+	case '?': command_func = &Compiler::command_find_pointer; break;
+	case '{': command_func = &Compiler::command_begin_loop; break;
+	case '}': command_func = &Compiler::command_end_loop; break;
 	default: throw ScriptSyntaxError();
 	}
 
@@ -395,6 +435,47 @@ void Script::Impl::Compiler::command_move_pointer(
 	script.code.emplace_back(Opcode::POINTER_GOTO, unsigned(index));
 }
 
+void Script::Impl::Compiler::command_find_pointer(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	unsigned int flags = 0;
+	for (const char *arg : args) {
+		if (arg[0] == '!' && !arg[1])
+			flags |= 0b0001;
+		else
+			throw ScriptSyntaxError();
+	}
+	script.code.emplace_back(Opcode::POINTER_WHERE, flags);
+}
+
+void Script::Impl::Compiler::command_begin_loop(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	int loops;
+	if (args.empty())
+		loops = 0;
+	else if (args.size() == 1)
+		loops = atoi(args[0]);
+	else
+		throw ScriptSyntaxError();
+	script.code.emplace_back(Opcode::LOOP_BEGIN, loops > 0 ? unsigned(loops) : 0);
+}
+
+void Script::Impl::Compiler::command_end_loop(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	if (!args.empty())
+		throw ScriptSyntaxError();
+	script.code.emplace_back(Opcode::LOOP_END, 0);
+}
+
+Script::Impl::Player::StopToken Script::Impl::Player::stop_token;
+
+Script::Impl::Player::Player() noexcept : random(nullptr) {
+}
+
+Script::Impl::Player::~Player () {
+	if (this->random)
+		delete this->random;
+}
+
 void Script::Impl::Player::random_sleep(bool status) noexcept {
 	if (status) {
 		if (!this->random)
@@ -408,17 +489,18 @@ void Script::Impl::Player::random_sleep(bool status) noexcept {
 }
 
 void Script::Impl::Player::operator()(const Script::Impl &script, Desktop &desktop) {
+	Player::stop_token.clear();
+	std::signal(SIGINT, [](int) { Player::stop_token.set(); });
+	this->loops.clear();
+
 	const auto *code_pointer = script.code.data();
 	const auto *const code_end = code_pointer + script.code.size();
-	while (code_pointer < code_end) {
+	while (code_pointer < code_end && !Player::stop_token.test()) {
 		const auto instruction = *code_pointer++;
 		const auto operand = instruction.operand();
 
 		switch (instruction.opcode()) {
 			using enum Impl::Opcode;
-
-		case NOP:
-			continue;
 
 		case SLEEP_MS:
 			this->sleep_ms(operand);
@@ -479,10 +561,31 @@ void Script::Impl::Player::operator()(const Script::Impl &script, Desktop &deskt
 			break;
 
 		case POINTER_GOTO:
-			desktop.pointer(
+			desktop.pointer({
 				script.positions[operand].first,
 				script.positions[operand].second
-			);
+			});
+			break;
+
+		case POINTER_WHERE:
+			this->print_pointer(desktop, operand);
+			break;
+
+		case LOOP_BEGIN:
+			this->loops.emplace_back(code_pointer, operand);
+			break;
+
+		case LOOP_END:
+			if (this->loops.empty())
+				break;
+			if (auto &n = this->loops.back().times; n) {
+				if (n == 1) {
+					this->loops.pop_back();
+					break;
+				}
+				n--;
+			}
+			code_pointer = this->loops.back().begin;
 			break;
 
 		[[unlikely]] default:
@@ -492,6 +595,8 @@ void Script::Impl::Player::operator()(const Script::Impl &script, Desktop &deskt
 		desktop.flush();
 		this->sleep_ms(50);
 	}
+
+	std::signal(SIGINT, SIG_DFL);
 }
 
 void Script::Impl::Player::sleep_ms(unsigned int time_ms) noexcept {
@@ -503,6 +608,16 @@ void Script::Impl::Player::sleep_ms(unsigned int time_ms) noexcept {
 		time_ms += static_cast<int>(off);
 	}
 	std::this_thread::sleep_for(std::chrono::milliseconds(time_ms));
+}
+
+void Script::Impl::Player::print_pointer(
+		const Desktop &desktop, unsigned int flags) noexcept {
+	const auto pos = desktop.pointer();
+	std::cout << '(' << pos.x << ',' << pos.y << ')';
+	if (flags & 0b0001)
+		std::cout << "\x1b[K\r" << std::flush;
+	else
+		std::cout << std::endl;
 }
 
 bool Script::random_sleep = true;

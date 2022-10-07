@@ -22,7 +22,8 @@ public:
 	virtual bool ready() const noexcept override;
 	virtual void key(Key k, PressAction a) override;
 	virtual void button(Button b, PressAction a) override;
-	virtual void pointer(unsigned int x, unsigned int y) override;
+	virtual void pointer(PointerPosition pos) override;
+	virtual PointerPosition pointer() const override;
 	virtual void flush() override;
 
 private:
@@ -52,6 +53,7 @@ private:
 	void send_fake_key_event(Key key, bool press);
 	void send_fake_button_event(Button button, bool press);
 	void send_fake_motion_event(int x, int y);
+	PointerPosition query_pointer() const noexcept;
 	void do_flush() noexcept;
 };
 
@@ -101,8 +103,12 @@ void X11Desktop::button(Button b, PressAction a) {
 	this->send_fake_button_event(b, a == PressAction::Press);
 }
 
-void X11Desktop::pointer(unsigned int x, unsigned int y) {
-	this->send_fake_motion_event(int(x), int(y));
+void X11Desktop::pointer(PointerPosition pos) {
+	this->send_fake_motion_event(int(pos.x), int(pos.y));
+}
+
+X11Desktop::PointerPosition X11Desktop::pointer() const {
+	return this->query_pointer();
 }
 
 void X11Desktop::flush() {
@@ -291,6 +297,19 @@ void X11Desktop::send_fake_button_event(Button button, bool press) {
 
 void X11Desktop::send_fake_motion_event(int x, int y) {
 	XTestFakeMotionEvent(this->display, 0, x, y, CurrentTime);
+}
+
+X11Desktop::PointerPosition X11Desktop::query_pointer() const noexcept {
+	Window root_win, child_win;
+	int root_x, root_y, win_x, win_y;
+	unsigned int mask;
+	const auto ok = XQueryPointer(
+		this->display, this->root_window,
+		&root_win, &child_win, &root_x, &root_y, &win_x, &win_y, &mask
+	);
+	if (!ok)
+		return {0, 0};
+	return {static_cast<unsigned int>(root_x), static_cast<unsigned int>(root_y)};
 }
 
 void X11Desktop::do_flush() noexcept {

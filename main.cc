@@ -2,6 +2,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 #include "argparse.h"
 #include "script.h"
@@ -27,6 +28,14 @@ static int oh_help(void *, const argparse_option_t *, const char *) noexcept {
 static int oh_help_script(void *, const argparse_option_t *, const char *) noexcept {
 	vinput::Script::print_doc(std::cout);
 	std::exit(EXIT_SUCCESS);
+}
+
+static int oh_trace_pointer(
+		void *data, const argparse_option_t *, const char *) noexcept {
+	auto &script = *static_cast<vinput::Script *>(data);
+	std::istringstream ss(R"(\{\[?!]\})");
+	script.append(ss);
+	return 0;
 }
 
 static int oh_no_rand_sleep(
@@ -59,9 +68,11 @@ static int oh_file(
 static const argparse_option_t options[] = {
 	{'h', "help", nullptr, "print help message and exit", oh_help},
 	{0, "help-script", nullptr, "print script syntax and exit", oh_help_script},
+	{'p', "trace-pointer", nullptr,
+		"trace pointer position and print to stdout", oh_trace_pointer},
 	{0, "no-rand-sleep", nullptr,
 		"disable random sleep time difference", oh_no_rand_sleep},
-	{0, "ignore-space", nullptr,
+	{'s', "ignore-space", nullptr,
 		"ignore spaces (0x09, 0x0a, 0x0d, 0x20) in script", oh_ignore_space},
 	{0, nullptr, "FILE", nullptr, oh_file},
 	{0, nullptr, nullptr, nullptr, nullptr},

@@ -2,8 +2,6 @@
 
 #include <exception>
 
-#include "event.h"
-
 namespace vinput {
 
 // Abstract interface of OS desktop input device operations.
@@ -42,6 +40,11 @@ public:
 		Release,
 	};
 
+	// Pointer position.
+	struct PointerPosition {
+		unsigned int x, y;
+	};
+
 	Desktop() noexcept;
 	virtual ~Desktop();
 
@@ -57,7 +60,9 @@ public:
 	// Send button event.
 	virtual void button(Button b, PressAction a) = 0;
 	// Send pointer movement event.
-	virtual void pointer(unsigned int x, unsigned int y) = 0;
+	virtual void pointer(PointerPosition pos) = 0;
+	// Get current pointer position
+	virtual PointerPosition pointer() const = 0;
 	// Immediately handle the events in the queue.
 	virtual void flush() = 0;
 
