@@ -78,6 +78,8 @@ private:
 	void command_find_pointer(const std::vector<const char *> &args, Script::Impl &script);
 	void command_begin_loop(const std::vector<const char *> &args, Script::Impl &script);
 	void command_end_loop(const std::vector<const char *> &args, Script::Impl &script);
+	void command_send_key(const std::vector<const char *> &args, Script::Impl &script);
+	void command_send_button(const std::vector<const char *> &args, Script::Impl &script);
 };
 
 class Script::Impl::Player {
@@ -162,9 +164,29 @@ command
 	| "\?" | "\[?!]"  (* get pointer coordinate and print / print without LF *)
 	| "\{" | "\[{" INT "]"  (* begin loop forever / INT times (INT <= 0 means forever) *)
 	| "\}"  (* end loop *)
+	| "\[$" KEY_NAME [ "," "v" | "^" ] "]"  (* click / press / release key *)
+	| "\[%" BUTTON_NAME [ "," "v" | "^" ] "]"  (* click / press / release button *)
 	;
 )%%"sv;
 	out.write(doc.data(), doc.length());
+	out.write("KEY_NAME\n", 9);
+	for (std::size_t i = 0; i < std::size_t(Desktop::Key::_COUNT); i++) {
+		const auto name = Desktop::key_to_name(static_cast<Desktop::Key>(i));
+		out.write(i ? "\t|" : "\t=", 2);
+		out.write(" \"", 2);
+		out.write(name.data(), name.size());
+		out.write("\"\n", 2);
+	}
+	out.write("\t;\n", 3);
+	out.write("BUTTON_NAME\n", 12);
+	for (std::size_t i = 0; i < std::size_t(Desktop::Button::_COUNT); i++) {
+		const auto name = Desktop::button_to_name(static_cast<Desktop::Button>(i));
+		out.write(i ? "\t|" : "\t=", 2);
+		out.write(" \"", 2);
+		out.write(name.data(), name.size());
+		out.write("\"\n", 2);
+	}
+	out.write("\t;\n", 3);
 }
 
 void Script::Impl::Compiler::operator()(std::istream &source, Script::Impl &script) {
@@ -314,6 +336,8 @@ void Script::Impl::Compiler::parse_command(
 	case '?': command_func = &Compiler::command_find_pointer; break;
 	case '{': command_func = &Compiler::command_begin_loop; break;
 	case '}': command_func = &Compiler::command_end_loop; break;
+	case '$': command_func = &Compiler::command_send_key; break;
+	case '%': command_func = &Compiler::command_send_button; break;
 	default: throw ScriptSyntaxError();
 	}
 
@@ -464,6 +488,54 @@ void Script::Impl::Compiler::command_end_loop(
 	if (!args.empty())
 		throw ScriptSyntaxError();
 	script.code.emplace_back(Opcode::LOOP_END, 0);
+}
+
+void Script::Impl::Compiler::command_send_key(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	if (args.empty() || args.size() > 2)
+		throw ScriptSyntaxError();
+	const auto [key, ok] = Desktop::key_from_name(args[0]);
+	if (!ok)
+		throw ScriptSyntaxError();
+	Opcode op;
+	if (args.size() == 1) {
+		op = Opcode::KEY_CLICK;
+	} else if (args[1][0] && !args[1][1]) {
+		const auto dir = args[1][0];
+		if (dir == '^')
+			op = Opcode::KEY_UP;
+		else if (dir == 'v' || dir == 'V' )
+			op = Opcode::KEY_DOWN;
+		else
+			throw ScriptSyntaxError();
+	} else {
+		throw ScriptSyntaxError();
+	}
+	script.code.emplace_back(op, static_cast<unsigned int>(key));
+}
+
+void Script::Impl::Compiler::command_send_button(
+		const std::vector<const char *> &args, Script::Impl &script) {
+	if (args.empty() || args.size() > 2)
+		throw ScriptSyntaxError();
+	const auto [button, ok] = Desktop::button_from_name(args[0]);
+	if (!ok)
+		throw ScriptSyntaxError();
+	Opcode op;
+	if (args.size() == 1) {
+		op = Opcode::BUTTON_CLICK;
+	} else if (args[1][0] && !args[1][1]) {
+		const auto dir = args[1][0];
+		if (dir == '^')
+			op = Opcode::BUTTON_UP;
+		else if (dir == 'v' || dir == 'V' )
+			op = Opcode::BUTTON_DOWN;
+		else
+			throw ScriptSyntaxError();
+	} else {
+		throw ScriptSyntaxError();
+	}
+	script.code.emplace_back(op, static_cast<unsigned int>(button));
 }
 
 Script::Impl::Player::StopToken Script::Impl::Player::stop_token;

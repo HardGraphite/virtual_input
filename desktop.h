@@ -1,6 +1,8 @@
 #pragma once
 
 #include <exception>
+#include <string_view>
+#include <utility>
 
 namespace vinput {
 
@@ -44,6 +46,11 @@ public:
 	struct PointerPosition {
 		unsigned int x, y;
 	};
+
+	static std::pair<Key, bool> key_from_name(std::string_view name) noexcept;
+	static std::string_view key_to_name(Key key) noexcept;
+	static std::pair<Button, bool> button_from_name(std::string_view name) noexcept;
+	static std::string_view button_to_name(Button button) noexcept;
 
 	Desktop() noexcept;
 	virtual ~Desktop();
