@@ -17,6 +17,26 @@
 
 #include "desktop.h"
 
+#ifdef _WIN32
+
+#include <Windows.h>
+
+static void win32_enable_ansi_esc_seq() noexcept {
+	static bool initialized = false;
+	if (initialized) [[likely]]
+		return;
+	initialized = true;
+
+	const auto h_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
+	DWORD mode;
+	if (!GetConsoleMode(h_stdout, &mode))
+		return;
+	mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	SetConsoleMode(h_stdout, mode);
+}
+
+#endif // _WIN32
+
 using namespace vinput;
 
 struct Script::Impl {
@@ -685,6 +705,9 @@ void Script::Impl::Player::sleep_ms(unsigned int time_ms) noexcept {
 void Script::Impl::Player::print_pointer(
 		const Desktop &desktop, unsigned int flags) noexcept {
 	const auto pos = desktop.pointer();
+#ifdef _WIN32
+	win32_enable_ansi_esc_seq();
+#endif // _WIN32
 	std::cout << '(' << pos.x << ',' << pos.y << ')';
 	if (flags & 0b0001)
 		std::cout << "\x1b[K\r" << std::flush;

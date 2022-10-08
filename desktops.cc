@@ -5,6 +5,9 @@
 
 using namespace vinput;
 
+#if VINPUT_DESKTOP_WINDOWS
+	VINPUT_DESKTOP_CONNECTER(windows);
+#endif // VINPUT_DESKTOP_WINDOWS
 #if VINPUT_DESKTOP_X11
 	VINPUT_DESKTOP_CONNECTER(x11);
 #endif // VINPUT_DESKTOP_X11
@@ -12,6 +15,9 @@ using namespace vinput;
 VINPUT_DESKTOP_CONNECTER(test);
 
 static Desktop *(*const available_desktops[])() = {
+#if VINPUT_DESKTOP_WINDOWS
+	VINPUT_DESKTOP_CONNECTER_NAME(windows),
+#endif // VINPUT_DESKTOP_WINDOWS
 #if VINPUT_DESKTOP_X11
 	VINPUT_DESKTOP_CONNECTER_NAME(x11),
 #endif // VINPUT_DESKTOP_X11

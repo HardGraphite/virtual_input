@@ -22,11 +22,11 @@ else()
 	message(WARNING "IPO is not supported: ${output}")
 endif()
 
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 	add_compile_options(
 		/W4 /utf-8 /Zc:inline,preprocessor
 	)
-	target_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+	add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else() # GCC, Clang, ...
 	add_compile_options(
 		-Wall -Wextra -Wpedantic
@@ -53,6 +53,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	else()
 		message(FATAL_ERROR "Unsupported display server protocol: ${DISPLAY_SERVER}")
 	endif()
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	target_compile_definitions(vinput PRIVATE "VINPUT_DESKTOP_WINDOWS=1")
+	target_sources(vinput PRIVATE "desktop_windows.cc")
 else()
 	message(FATAL_ERROR "Unsupported system: ${CMAKE_SYSTEM_NAME}")
 endif()
