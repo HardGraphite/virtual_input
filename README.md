@@ -41,5 +41,6 @@ echo '\[{10] \r \[#0.5] \}' | vinput
 
 The following platforms are supported until now:
 
-- X11 (Xorg)
+- X11
 - Windows
+- Linux *(use uinput)*
