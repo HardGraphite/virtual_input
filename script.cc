@@ -6,6 +6,7 @@
 #include <cmath>
 #include <csignal>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <istream>
 #include <ostream>
@@ -166,11 +167,46 @@ unsigned int Script::Impl::Instruction::operand() const noexcept {
 	return static_cast<unsigned int>(this->data >> 4);
 }
 
+static void _print_doc_cell(
+		std::size_t index, std::string_view str, char quote,
+		std::ostream &out) noexcept {
+	char buffer[24];
+	char *buffer_p = buffer;
+	constexpr std::size_t cell_width = 18;
+
+	if (index % 4 == 0) {
+		buffer[0] = '\n';
+		buffer[1] = '\t';
+		buffer[2] = index ? '|' : '=';
+		buffer_p = buffer + 3;
+	} else {
+		buffer[0] = '|';
+		buffer_p = buffer + 1;
+	}
+	*buffer_p++ = ' ';
+
+	if (quote) {
+		*buffer_p++ = quote;
+		buffer_p += str.copy(buffer_p, str.size());
+		*buffer_p++ = quote;
+	} else {
+		str.copy(buffer_p, str.size());
+	}
+
+	if (const std::size_t width = buffer_p - buffer; width < cell_width) {
+		std::memset(buffer_p, ' ', cell_width - width);
+		buffer_p = buffer + cell_width;
+	}
+
+	assert(buffer_p < buffer + sizeof buffer);
+	out.write(buffer, buffer_p - buffer);
+}
+
 void Script::Impl::Compiler::print_doc(std::ostream &out) noexcept {
 	using namespace std::string_view_literals;
 	const auto doc = R"%%((* vinput script *)
 script = { key | command } ;
-key    = ALPHA | DIGIT | PUNCT ;
+key    = ALPHA | DIGIT | PUNCT | SPACE ? ;
 command
 	= "\\"  (* backslash key *)
 	| "\n" | "\r"  (* enter key *)
@@ -189,24 +225,24 @@ command
 	;
 )%%"sv;
 	out.write(doc.data(), doc.length());
-	out.write("KEY_NAME\n", 9);
+	out.write("PUNCT", 5);
+	for (const char *const puncts = "!\"#$%&'()*+,-./:;<=>?@[]^_`{|}~",
+			*p = puncts; *p; p++) {
+		_print_doc_cell(p - puncts, {p, 1}, *p == '"' ? '\'' : '"', out);
+	}
+	out.write("\n\t;\n", 4);
+	out.write("KEY_NAME", 8);
 	for (std::size_t i = 0; i < std::size_t(Desktop::Key::_COUNT); i++) {
 		const auto name = Desktop::key_to_name(static_cast<Desktop::Key>(i));
-		out.write(i ? "\t|" : "\t=", 2);
-		out.write(" \"", 2);
-		out.write(name.data(), name.size());
-		out.write("\"\n", 2);
+		_print_doc_cell(i, name, '"', out);
 	}
-	out.write("\t;\n", 3);
-	out.write("BUTTON_NAME\n", 12);
+	out.write("\n\t;\n", 4);
+	out.write("BUTTON_NAME", 11);
 	for (std::size_t i = 0; i < std::size_t(Desktop::Button::_COUNT); i++) {
 		const auto name = Desktop::button_to_name(static_cast<Desktop::Button>(i));
-		out.write(i ? "\t|" : "\t=", 2);
-		out.write(" \"", 2);
-		out.write(name.data(), name.size());
-		out.write("\"\n", 2);
+		_print_doc_cell(i, name, '"', out);
 	}
-	out.write("\t;\n", 3);
+	out.write("\n\t;\n", 4);
 }
 
 void Script::Impl::Compiler::operator()(std::istream &source, Script::Impl &script) {

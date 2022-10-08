@@ -101,7 +101,7 @@ static const argparse_option_t options[] = {
 static const argparse_program_t program = {
 	.name = "vinput",
 	.usage = "[OPTION...] [SCRIPT_FILE|-]*",
-	.help = "virtual input, sending fake input events to the display server",
+	.help = "virtual input, read script and send fake input events to the display server",
 	.opts = options,
 };
 
