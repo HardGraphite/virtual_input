@@ -716,7 +716,7 @@ void Script::Impl::Player::print_pointer(
 }
 
 bool Script::random_sleep = true;
-bool Script::ignore_space = false;
+bool Script::ignore_space = true;
 
 Script::Script() noexcept : _impl(new Impl) {
 }

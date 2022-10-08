@@ -9,7 +9,7 @@ namespace vinput {
 class Script final {
 public:
 	static bool random_sleep; // Default: true
-	static bool ignore_space; // Default: false
+	static bool ignore_space; // Default: true
 
 	static void print_doc(std::ostream &out) noexcept;
 

@@ -63,9 +63,9 @@ static int oh_no_rand_sleep(
 	return 0;
 }
 
-static int oh_ignore_space(
+static int oh_no_ignore_space(
 		void *, const argparse_option_t *, const char *) noexcept {
-	Script::ignore_space = true;
+	Script::ignore_space = false;
 	return 0;
 }
 
@@ -92,8 +92,8 @@ static const argparse_option_t options[] = {
 		"trace pointer position and print to stdout", oh_trace_pointer},
 	{0, "no-rand-sleep", nullptr,
 		"disable random sleep time difference", oh_no_rand_sleep},
-	{'s', "ignore-space", nullptr,
-		"ignore spaces (0x09, 0x0a, 0x0d, 0x20) in script", oh_ignore_space},
+	{'s', "no-ignore-space", nullptr,
+		"recognize spaces (0x09, 0x0a, 0x0d, 0x20) as keys in script", oh_no_ignore_space},
 	{0, nullptr, "FILE", nullptr, oh_file},
 	{0, nullptr, nullptr, nullptr, nullptr},
 };
