@@ -2,6 +2,7 @@
 
 #include "desktop.h"
 #include "desktops_def.h"
+#include "prints.h"
 
 #include <Windows.h>
 
@@ -205,8 +206,11 @@ void WindowsDesktop::send_keyboard_input(Key k, bool down) noexcept {
 	if (static_cast<std::size_t>(k) >= KEY_COUNT) [[unlikely]]
 		return;
 	const auto vk_code = vk_map[static_cast<std::size_t>(k)];
-	if (vk_code == WINVK_NOT_AVAILABLE) [[unlikely]]
+	if (vk_code == WINVK_NOT_AVAILABLE) [[unlikely]] {
+		const auto key_name = key_to_name(k);
+		print_warning("key <%.*s> not available", int(key_name.size()), key_name.data());
 		return;
+	}
 
 	INPUT inputs[2];
 	int inputs_n;

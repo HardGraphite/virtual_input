@@ -3,6 +3,7 @@
 
 #include "desktop.h"
 #include "desktops_def.h"
+#include "prints.h"
 
 #include <fcntl.h>
 #include <linux/uinput.h>
@@ -297,8 +298,11 @@ void LinuxUinputDesktop::keyboard_key(Key k, bool press) noexcept {
 	if (static_cast<std::size_t>(k) >= KEY_COUNT) [[unlikely]]
 		return;
 	const int key_code = key_code_map[static_cast<std::size_t>(k)];
-	if (key_code == 0) [[unlikely]]
+	if (key_code == 0) [[unlikely]] {
+		const auto key_name = key_to_name(k);
+		print_warning("key <%.*s> not available", int(key_name.size()), key_name.data());
 		return;
+	}
 
 	const auto fd = this->fd_keyboard;
 	const int key_status = press ? 1 : 0;

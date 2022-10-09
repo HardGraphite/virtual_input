@@ -1,9 +1,10 @@
 #include <cassert>
 #include <cstdio>
-#include <iostream>
+#include <ostream>
 
 #include "desktop.h"
 #include "desktops_def.h"
+#include "prints.h"
 
 using namespace vinput;
 
@@ -20,7 +21,7 @@ public:
 
 private:
 	PointerPosition pointer_position = { 0, 0 };
-	std::ostream *out_stream = &std::cout;
+	std::ostream *out_stream = &cout();
 };
 
 }

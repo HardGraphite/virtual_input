@@ -7,7 +7,6 @@
 #include <csignal>
 #include <cstdint>
 #include <cstring>
-#include <iostream>
 #include <istream>
 #include <ostream>
 #include <random>
@@ -17,26 +16,7 @@
 #include <vector>
 
 #include "desktop.h"
-
-#ifdef _WIN32
-
-#include <Windows.h>
-
-static void win32_enable_ansi_esc_seq() noexcept {
-	static bool initialized = false;
-	if (initialized) [[likely]]
-		return;
-	initialized = true;
-
-	const auto h_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
-	DWORD mode;
-	if (!GetConsoleMode(h_stdout, &mode))
-		return;
-	mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-	SetConsoleMode(h_stdout, mode);
-}
-
-#endif // _WIN32
+#include "prints.h"
 
 using namespace vinput;
 
@@ -360,7 +340,7 @@ bool Script::Impl::Compiler::next_instr(std::istream &source, Script::Impl &scri
 	[[unlikely]] default:
 		if (ch == std::istream::traits_type::eof())
 			return false;
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::UNKNOWN_KEY);
 	}
 
 	code.emplace_back(Impl::Opcode::KEY_CLICK, unsigned(key_code));
@@ -374,7 +354,7 @@ void Script::Impl::Compiler::parse_command(
 	const char command = has_args ? source.get() : c0;
 
 	if (command == std::istream::traits_type::eof())
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::UNKNOWN_COMMAND);
 
 	using command_func_t =
 		void (Compiler::*)(const std::vector<const char *> &, Script::Impl &);
@@ -394,7 +374,7 @@ void Script::Impl::Compiler::parse_command(
 	case '}': command_func = &Compiler::command_end_loop; break;
 	case '$': command_func = &Compiler::command_send_key; break;
 	case '%': command_func = &Compiler::command_send_button; break;
-	default: throw ScriptSyntaxError();
+	default: throw ScriptSyntaxError(ScriptSyntaxError::UNKNOWN_COMMAND);
 	}
 
 	auto &args = this->strarr_buffer;
@@ -418,28 +398,28 @@ void Script::Impl::Compiler::parse_command(
 void Script::Impl::Compiler::command_backslash(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (!args.empty())
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	script.code.emplace_back(Opcode::KEY_CLICK, unsigned(Desktop::Key::BACKSLASH));
 }
 
 void Script::Impl::Compiler::command_enter(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (!args.empty())
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	script.code.emplace_back(Opcode::KEY_CLICK, unsigned(Desktop::Key::RETURN));
 }
 
 void Script::Impl::Compiler::command_tab(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (!args.empty())
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	script.code.emplace_back(Opcode::KEY_CLICK, unsigned(Desktop::Key::TAB));
 }
 
 void Script::Impl::Compiler::command_space(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (!args.empty())
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	script.code.emplace_back(Opcode::KEY_CLICK, unsigned(Desktop::Key::SPACE));
 }
 
@@ -451,7 +431,7 @@ void Script::Impl::Compiler::command_sleep(
 	}
 
 	if (args.size() != 1)
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	const auto time = std::atof(args[0]);
 	if (time < 0.001)
 		return;
@@ -475,7 +455,7 @@ void Script::Impl::Compiler::command_sleep(
 void Script::Impl::Compiler::command_click_left(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (!args.empty())
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	script.code.emplace_back(Opcode::BUTTON_CLICK, unsigned(Desktop::Button::LEFT));
 }
 
@@ -491,9 +471,9 @@ void Script::Impl::Compiler::command_click_middle(
 		else if (dir == 'v' || dir == 'V' )
 			button = Desktop::Button::SCROLL_DOWN;
 		else
-			throw ScriptSyntaxError();
+			throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	} else {
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	}
 	script.code.emplace_back(Opcode::BUTTON_CLICK, unsigned(button));
 }
@@ -501,14 +481,14 @@ void Script::Impl::Compiler::command_click_middle(
 void Script::Impl::Compiler::command_click_right(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (!args.empty())
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	script.code.emplace_back(Opcode::BUTTON_CLICK, unsigned(Desktop::Button::RIGHT));
 }
 
 void Script::Impl::Compiler::command_move_pointer(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (args.size() != 2)
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	const auto x = atoi(args[0]), y = atoi(args[1]);
 	const auto index = script.positions.size();
 	script.positions.emplace_back(x >= 0 ? unsigned(x) : 0u, y >= 0 ? unsigned(y) : 0u);
@@ -522,7 +502,7 @@ void Script::Impl::Compiler::command_find_pointer(
 		if (arg[0] == '!' && !arg[1])
 			flags |= 0b0001;
 		else
-			throw ScriptSyntaxError();
+			throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	}
 	script.code.emplace_back(Opcode::POINTER_WHERE, flags);
 }
@@ -535,24 +515,24 @@ void Script::Impl::Compiler::command_begin_loop(
 	else if (args.size() == 1)
 		loops = atoi(args[0]);
 	else
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	script.code.emplace_back(Opcode::LOOP_BEGIN, loops > 0 ? unsigned(loops) : 0);
 }
 
 void Script::Impl::Compiler::command_end_loop(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (!args.empty())
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	script.code.emplace_back(Opcode::LOOP_END, 0);
 }
 
 void Script::Impl::Compiler::command_send_key(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (args.empty() || args.size() > 2)
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	const auto [key, ok] = Desktop::key_from_name(args[0]);
 	if (!ok)
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	Opcode op;
 	if (args.size() == 1) {
 		op = Opcode::KEY_CLICK;
@@ -563,9 +543,9 @@ void Script::Impl::Compiler::command_send_key(
 		else if (dir == 'v' || dir == 'V' )
 			op = Opcode::KEY_DOWN;
 		else
-			throw ScriptSyntaxError();
+			throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	} else {
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	}
 	script.code.emplace_back(op, static_cast<unsigned int>(key));
 }
@@ -573,10 +553,10 @@ void Script::Impl::Compiler::command_send_key(
 void Script::Impl::Compiler::command_send_button(
 		const std::vector<const char *> &args, Script::Impl &script) {
 	if (args.empty() || args.size() > 2)
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	const auto [button, ok] = Desktop::button_from_name(args[0]);
 	if (!ok)
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	Opcode op;
 	if (args.size() == 1) {
 		op = Opcode::BUTTON_CLICK;
@@ -587,9 +567,9 @@ void Script::Impl::Compiler::command_send_button(
 		else if (dir == 'v' || dir == 'V' )
 			op = Opcode::BUTTON_DOWN;
 		else
-			throw ScriptSyntaxError();
+			throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	} else {
-		throw ScriptSyntaxError();
+		throw ScriptSyntaxError(ScriptSyntaxError::ILLEGAL_ARGUMENT);
 	}
 	script.code.emplace_back(op, static_cast<unsigned int>(button));
 }
@@ -742,13 +722,14 @@ void Script::Impl::Player::print_pointer(
 		const Desktop &desktop, unsigned int flags) noexcept {
 	const auto pos = desktop.pointer();
 #ifdef _WIN32
-	win32_enable_ansi_esc_seq();
+	win32_enable_ansi_esc();
 #endif // _WIN32
-	std::cout << '(' << pos.x << ',' << pos.y << ')';
+	auto &out = cout();
+	out << '(' << pos.x << ',' << pos.y << ')';
 	if (flags & 0b0001)
-		std::cout << "\x1b[K\r" << std::flush;
+		out << "\x1b[K\r" << std::flush;
 	else
-		std::cout << std::endl;
+		out << std::endl;
 }
 
 bool Script::random_sleep = true;
@@ -799,4 +780,15 @@ void Script::play(Desktop &desktop) const {
 	Impl::Player player;
 	player.random_sleep(Script::random_sleep);
 	player(*this->_impl, desktop);
+}
+
+const char *ScriptSyntaxError::what() const noexcept {
+	const char *s;
+	switch (this->error) {
+	case UNKNOWN_KEY: s = "unknown key"; break;
+	case UNKNOWN_COMMAND: s = "unknown command"; break;
+	case ILLEGAL_ARGUMENT: s = "illegal argument"; break;
+	default: s = "syntax error"; break;
+	}
+	return s;
 }

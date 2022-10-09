@@ -35,7 +35,20 @@ private:
 	Impl *_impl;
 };
 
-class ScriptSyntaxError : std::exception {
+class ScriptSyntaxError : public std::exception {
+public:
+	enum Error {
+		UNKNOWN_KEY,
+		UNKNOWN_COMMAND,
+		ILLEGAL_ARGUMENT,
+	};
+
+	ScriptSyntaxError(Error e) noexcept : error(e) { }
+
+	virtual const char *what() const noexcept override;
+
+private:
+	Error error;
 };
 
 }

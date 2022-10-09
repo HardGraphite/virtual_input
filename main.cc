@@ -5,19 +5,31 @@
 #include <sstream>
 
 #include "argparse.h"
-#include "script.h"
 #include "desktops.h"
+#include "prints.h"
+#include "script.h"
 
 using namespace vinput;
 
 static void parse_args(int argc, char *argv[], Desktop *&desktop, Script &script);
 
 int main(int argc, char *argv[]) {
+	int exit_status = EXIT_SUCCESS;
 	Desktop *desktop = nullptr;
 	Script script;
-	parse_args(argc, argv, desktop, script);
-	script.play(*desktop);
-	disconnect_desktop(desktop);
+
+	try {
+		parse_args(argc, argv, desktop, script);
+		script.play(*desktop);
+	} catch (const std::exception &e) {
+		print_error(e);
+		exit_status = EXIT_FAILURE;
+	}
+
+	if (desktop)
+		disconnect_desktop(desktop);
+
+	return exit_status;
 }
 
 static void print_program_help() noexcept;
@@ -72,13 +84,20 @@ static int oh_no_ignore_space(
 static int oh_file(
 		void *data, const argparse_option_t *, const char *arg) noexcept {
 	auto &script = static_cast<ArgParseContext *>(data)->script;
-	if (!std::strcmp(arg, "-")) {
-		script.append(std::cin);
-	} else {
-		std::ifstream file(arg);
-		if (file.is_open())
-			script.append(file);
+
+	try {
+		if (!std::strcmp(arg, "-")) {
+			script.append(std::cin);
+		} else {
+			std::ifstream file(arg);
+			if (file.is_open())
+				script.append(file);
+		}
+	} catch (const ScriptSyntaxError &e) {
+		print_error(e);
+		std::exit(EXIT_FAILURE);
 	}
+
 	return 0;
 }
 
@@ -111,7 +130,8 @@ static void print_program_help() noexcept {
 	argparse_help(&program);
 }
 
-static void parse_args(int argc, char *argv[], Desktop *&desktop, Script &script) {
+static void parse_args(
+		int argc, char *argv[], Desktop *&desktop, Script &script) {
 	desktop = nullptr;
 	ArgParseContext ctx = {
 		.desktop = desktop,
